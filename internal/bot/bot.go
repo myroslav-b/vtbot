@@ -1,0 +1,163 @@
+package bot
+
+import (
+	"fmt"
+	"io"
+	"log"
+	"time"
+
+	"vtbot/internal/config"
+	"vtbot/internal/utils"
+	"vtbot/internal/virustotal"
+
+	tele "gopkg.in/telebot.v3"
+)
+
+type Job struct {
+	Context  tele.Context
+	Document *tele.Document
+}
+
+type Bot struct {
+	bot *tele.Bot
+	vt  *virustotal.Client
+	cfg *config.Config
+}
+
+func New(cfg *config.Config, vt *virustotal.Client) (*Bot, error) {
+	pref := tele.Settings{
+		Token:  cfg.TelegramToken,
+		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
+	}
+
+	b, err := tele.NewBot(pref)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Bot{
+		bot: b,
+		vt:  vt,
+		cfg: cfg,
+	}, nil
+}
+
+func (b *Bot) Start() {
+	jobQueue := make(chan Job, 100)
+
+	go b.worker(jobQueue)
+
+	b.bot.Handle(tele.OnDocument, func(c tele.Context) error {
+		doc := c.Message().Document
+
+		if utils.ShouldIgnoreFile(doc.FileName) {
+			return nil
+		}
+
+		if doc.FileSize > b.cfg.MaxFileSize {
+			return c.Reply(fmt.Sprintf("⚠️ Файл %s завеликий (>20MB). Пропускаємо.", doc.FileName))
+		}
+
+		select {
+		case jobQueue <- Job{Context: c, Document: doc}:
+			return c.Reply(fmt.Sprintf("⏳ Файл %s додано в чергу на перевірку...", doc.FileName))
+		case <-time.After(2 * time.Second):
+			return c.Reply("⚠️ Черга переповнена. Спробуйте пізніше.")
+		}
+	})
+
+	log.Println("Security Bot запущено...")
+	b.bot.Start()
+}
+
+func (b *Bot) worker(jobs <-chan Job) {
+	ticker := time.NewTicker(b.cfg.RequestInterval)
+	defer ticker.Stop()
+
+	for job := range jobs {
+		<-ticker.C
+		b.processJob(job)
+	}
+}
+
+func (b *Bot) processJob(job Job) {
+	doc := job.Document
+	c := job.Context
+
+	statusMsg, err := b.bot.Send(c.Chat(), fmt.Sprintf("🔍 Аналізую %s...", doc.FileName))
+	if err != nil {
+		log.Println("Не вдалося відправити повідомлення:", err)
+		return
+	}
+
+	fileReader, err := b.bot.File(&doc.File)
+	if err != nil {
+		b.bot.Edit(statusMsg, "❌ Помилка завантаження файлу з Telegram.")
+		return
+	}
+	defer fileReader.Close()
+
+	content, err := io.ReadAll(fileReader)
+	if err != nil {
+		b.bot.Edit(statusMsg, "❌ Помилка читання файлу.")
+		return
+	}
+
+	hash := utils.CalculateSHA256(content)
+
+	report, found, err := b.vt.GetReportByHash(hash)
+	if err != nil {
+		log.Printf("API Error (Hash Check): %v", err)
+		b.bot.Edit(statusMsg, "❌ Помилка з'єднання з VirusTotal.")
+		return
+	}
+
+	if found {
+		b.sendReport(statusMsg, doc.FileName, report, "✅ Знайдено в базі (без завантаження)")
+		return
+	}
+
+	b.bot.Edit(statusMsg, "📤 Файл невідомий. Завантажую на VirusTotal...")
+
+	analysisID, err := b.vt.UploadFile(doc.FileName, content)
+	if err != nil {
+		b.bot.Edit(statusMsg, fmt.Sprintf("❌ Помилка завантаження на VT: %v", err))
+		return
+	}
+
+	finalReport, err := b.vt.PollAnalysis(analysisID)
+	if err != nil {
+		b.bot.Edit(statusMsg, "⚠️ Час очікування аналізу вичерпано або помилка.")
+		return
+	}
+
+	b.sendReport(statusMsg, doc.FileName, finalReport, "🆕 Новий аналіз")
+}
+
+func (b *Bot) sendReport(msg *tele.Message, filename string, report *virustotal.VTResponse, note string) {
+	stats := report.Data.Attributes.Stats
+
+	emoji := "✅"
+	verdict := "Чистий"
+
+	if stats.Malicious > 0 {
+		emoji = "⛔️"
+		verdict = fmt.Sprintf("ЗАГРОЗА (%d детектів)", stats.Malicious)
+	} else if stats.Suspicious > 0 {
+		emoji = "⚠️"
+		verdict = "Підозрілий"
+	}
+
+	text := fmt.Sprintf(
+		"%s **Результат:** %s\n"+
+			"📂 Файл: `%s`\n"+
+			"📊 Інфо: %s\n\n"+
+			"🔴 Malicious: %d\n"+
+			"🟠 Suspicious: %d\n"+
+			"🟢 Harmless: %d\n",
+		emoji, verdict, filename, note,
+		stats.Malicious, stats.Suspicious, stats.Harmless,
+	)
+
+	b.bot.Edit(msg, text, &tele.SendOptions{ParseMode: tele.ModeMarkdown})
+}
