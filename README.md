@@ -57,3 +57,11 @@ If you prefer not to use Docker, you need to have Go installed (`1.25` or newer)
 ## Usage
 
 Simply start a chat with the bot and send any document or file. The bot will acknowledge the submission, analyze the file, and send back a report summarizing the `malicious`, `suspicious`, and `harmless` detection scores.
+
+### Using in Groups and Channels
+
+To allow the bot to read and check files sent in a group or channel, you must do one of the following:
+- **Disable Privacy Mode** for your bot via [@BotFather](https://t.me/BotFather) (send `/setprivacy`, choose your bot, and set to `Disable`).
+- OR **Promote the bot to Administrator** in the group/channel. 
+
+*Note: The standard Telegram Bot API has a 20 MB file size limit for downloading files. Files larger than 20 MB cannot be downloaded or checked by the bot.*
