@@ -11,6 +11,7 @@ A Telegram bot that checks incoming files using the [VirusTotal API](https://www
 - **Queue System:** Safely handles multiple file validation requests concurrently.
 - **Rate Limit Handling:** Accommodates the free VirusTotal API tier limits (4 requests/minute) with built-in request intervals.
 - **Size Limit Check:** Rejects files over 20MB to comply with free-tier capabilities.
+- **Output Verbosity:** Configurable detailed or concise message output (`VERBOSE_OUTPUT`).
 - **Docker Support:** Ready to be deployed quickly using Docker and Docker Compose.
 
 ## Prerequisites
@@ -30,6 +31,7 @@ To run this bot, you will need:
    ```env
    TELEGRAM_TOKEN=your_telegram_bot_token
    VT_API_KEY=your_virustotal_api_key
+   VERBOSE_OUTPUT=false # Set to true for detailed detection scores
    ```
 4. Build and start the bot:
    ```bash
@@ -44,6 +46,7 @@ If you prefer not to use Docker, you need to have Go installed (`1.25` or newer)
    ```bash
    export TELEGRAM_TOKEN="your_telegram_bot_token"
    export VT_API_KEY="your_virustotal_api_key"
+   export VERBOSE_OUTPUT="false"
    ```
 2. Build the project:
    ```bash
@@ -56,7 +59,11 @@ If you prefer not to use Docker, you need to have Go installed (`1.25` or newer)
 
 ## Usage
 
-Simply start a chat with the bot and send any document or file. The bot will acknowledge the submission, analyze the file, and send back a report summarizing the `malicious`, `suspicious`, and `harmless` detection scores.
+Simply start a chat with the bot and send any document or file. The bot will acknowledge the submission, analyze the file, and send back a report.
+
+Depending on the `VERBOSE_OUTPUT` setting:
+- **`false` (Default)**: Returns a concise message with just the file name and the final verdict (e.g., Clean or Threat).
+- **`true`**: Returns a detailed report summarizing the `malicious`, `suspicious`, and `harmless/undetected` detection scores.
 
 ### Using in Groups and Channels
 

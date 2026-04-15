@@ -137,6 +137,11 @@ func (b *Bot) processJob(job Job) {
 func (b *Bot) sendReport(msg *tele.Message, filename string, report *virustotal.VTResponse, note string) {
 	stats := report.Data.Attributes.Stats
 
+	// Якщо stats порожній (сума 0), можливо це LastAnalysisStats (з файлу)
+	if stats.Malicious == 0 && stats.Suspicious == 0 && stats.Harmless == 0 && stats.Undetected == 0 {
+		stats = report.Data.Attributes.LastAnalysisStats
+	}
+
 	emoji := "✅"
 	verdict := "Чистий"
 
@@ -148,16 +153,25 @@ func (b *Bot) sendReport(msg *tele.Message, filename string, report *virustotal.
 		verdict = "Підозрілий"
 	}
 
-	text := fmt.Sprintf(
-		"%s **Результат:** %s\n"+
+	var text string
+	if b.cfg.VerboseOutput {
+		text = fmt.Sprintf(
+			"%s **Результат:** %s\n"+
+				"📂 Файл: `%s`\n"+
+				"📊 Інфо: %s\n\n"+
+				"🔴 Malicious: %d\n"+
+				"🟠 Suspicious: %d\n"+
+				"🟢 Harmless/Undetected: %d\n",
+			emoji, verdict, filename, note,
+			stats.Malicious, stats.Suspicious, stats.Harmless+stats.Undetected,
+		)
+	} else {
+		text = fmt.Sprintf(
 			"📂 Файл: `%s`\n"+
-			"📊 Інфо: %s\n\n"+
-			"🔴 Malicious: %d\n"+
-			"🟠 Suspicious: %d\n"+
-			"🟢 Harmless: %d\n",
-		emoji, verdict, filename, note,
-		stats.Malicious, stats.Suspicious, stats.Harmless,
-	)
+				"%s Результат: %s\n",
+			filename, emoji, verdict,
+		)
+	}
 
 	b.bot.Edit(msg, text, &tele.SendOptions{ParseMode: tele.ModeMarkdown})
 }

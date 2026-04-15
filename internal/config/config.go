@@ -11,6 +11,7 @@ type Config struct {
 	VTApiKey        string
 	MaxFileSize     int64
 	RequestInterval time.Duration
+	VerboseOutput   bool
 }
 
 func Load() *Config {
@@ -26,5 +27,6 @@ func Load() *Config {
 		VTApiKey:        apiKey,
 		MaxFileSize:     20 * 1024 * 1024, // 20 MB
 		RequestInterval: 16 * time.Second, // Free tier: 4 req/min
+		VerboseOutput:   os.Getenv("VERBOSE_OUTPUT") == "true",
 	}
 }
