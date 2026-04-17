@@ -14,8 +14,9 @@ import (
 )
 
 type Job struct {
-	Context  tele.Context
-	Document *tele.Document
+	Context   tele.Context
+	Document  *tele.Document
+	StatusMsg *tele.Message
 }
 
 type Bot struct {
@@ -58,10 +59,17 @@ func (b *Bot) Start() {
 			return c.Reply(fmt.Sprintf("⚠️ Файл %s завеликий (>20MB). Пропускаємо.", doc.FileName))
 		}
 
+		statusMsg, err := b.bot.Reply(c.Message(), fmt.Sprintf("⏳ Файл %s додано в чергу на перевірку...", doc.FileName))
+		if err != nil {
+			log.Println("Не вдалося відправити повідомлення про чергу:", err)
+			return err
+		}
+
 		select {
-		case jobQueue <- Job{Context: c, Document: doc}:
-			return c.Reply(fmt.Sprintf("⏳ Файл %s додано в чергу на перевірку...", doc.FileName))
+		case jobQueue <- Job{Context: c, Document: doc, StatusMsg: statusMsg}:
+			return nil
 		case <-time.After(2 * time.Second):
+			b.bot.Delete(statusMsg)
 			return c.Reply("⚠️ Черга переповнена. Спробуйте пізніше.")
 		}
 	})
@@ -82,12 +90,11 @@ func (b *Bot) worker(jobs <-chan Job) {
 
 func (b *Bot) processJob(job Job) {
 	doc := job.Document
-	c := job.Context
+	statusMsg := job.StatusMsg
 
-	statusMsg, err := b.bot.Send(c.Chat(), fmt.Sprintf("🔍 Аналізую %s...", doc.FileName))
+	_, err := b.bot.Edit(statusMsg, fmt.Sprintf("🔍 Аналізую %s...", doc.FileName))
 	if err != nil {
-		log.Println("Не вдалося відправити повідомлення:", err)
-		return
+		log.Println("Не вдалося оновити повідомлення:", err)
 	}
 
 	fileReader, err := b.bot.File(&doc.File)
