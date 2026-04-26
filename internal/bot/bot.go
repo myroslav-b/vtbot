@@ -56,7 +56,7 @@ func (b *Bot) Start() {
 		}
 
 		if doc.FileSize > b.cfg.MaxFileSize {
-			return c.Reply(fmt.Sprintf("⚠️ Файл %s завеликий (>20MB). Пропускаємо.", doc.FileName))
+			return c.Reply(fmt.Sprintf("⚠️ Файл %s завеликий (>%dMB). Пропускаємо.", doc.FileName, b.cfg.MaxFileSize/(1024*1024)))
 		}
 
 		statusMsg, err := b.bot.Reply(c.Message(), fmt.Sprintf("⏳ Файл %s додано в чергу на перевірку...", doc.FileName))
@@ -128,7 +128,8 @@ func (b *Bot) processJob(job Job) {
 
 	analysisID, err := b.vt.UploadFile(doc.FileName, content)
 	if err != nil {
-		b.bot.Edit(statusMsg, fmt.Sprintf("❌ Помилка завантаження на VT: %v", err))
+		log.Printf("Upload error for %s: %v", doc.FileName, err)
+		b.bot.Edit(statusMsg, "❌ Помилка завантаження файлу на VirusTotal.")
 		return
 	}
 

@@ -18,13 +18,18 @@ type Client struct {
 func NewClient(apiKey string) *Client {
 	return &Client{
 		apiKey: apiKey,
-		client: &http.Client{},
+		client: &http.Client{
+			Timeout: 30 * time.Second,
+		},
 	}
 }
 
 func (c *Client) GetReportByHash(hash string) (*VTResponse, bool, error) {
 	url := fmt.Sprintf("https://www.virustotal.com/api/v3/files/%s", hash)
-	req, _ := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, false, fmt.Errorf("creating request: %w", err)
+	}
 	req.Header.Add("x-apikey", c.apiKey)
 
 	resp, err := c.client.Do(req)
@@ -58,10 +63,17 @@ func (c *Client) UploadFile(filename string, content []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	part.Write(content)
-	writer.Close()
+	if _, err := part.Write(content); err != nil {
+		return "", fmt.Errorf("writing file content: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return "", fmt.Errorf("closing multipart writer: %w", err)
+	}
 
-	req, _ := http.NewRequest("POST", url, body)
+	req, err := http.NewRequest("POST", url, body)
+	if err != nil {
+		return "", fmt.Errorf("creating request: %w", err)
+	}
 	req.Header.Add("x-apikey", c.apiKey)
 	req.Header.Add("Content-Type", writer.FormDataContentType())
 
@@ -89,18 +101,28 @@ func (c *Client) PollAnalysis(analysisID string) (*VTResponse, error) {
 	for i := 0; i < 20; i++ {
 		time.Sleep(15 * time.Second) // Повага до rate limit навіть всередині поллінгу
 
-		req, _ := http.NewRequest("GET", url, nil)
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, fmt.Errorf("creating request: %w", err)
+		}
 		req.Header.Add("x-apikey", c.apiKey)
 
 		resp, err := c.client.Do(req)
 		if err != nil {
 			return nil, err
 		}
-		defer resp.Body.Close()
+
+		bodyBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if err != nil {
+			return nil, fmt.Errorf("reading response body: %w", err)
+		}
 
 		var result VTResponse
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		json.Unmarshal(bodyBytes, &result)
+		if err := json.Unmarshal(bodyBytes, &result); err != nil {
+			return nil, fmt.Errorf("decoding response: %w", err)
+		}
 
 		if result.Data.Attributes.Status == "completed" {
 			return &result, nil
