@@ -35,3 +35,27 @@ func TestCalculateSHA256(t *testing.T) {
 		t.Errorf("CalculateSHA256() = %v, want %v", got, expected)
 	}
 }
+
+func TestEscapeMarkdown(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"no special chars", "document.pdf", "document.pdf"},
+		{"underscore", "my_file.exe", "my\\_file.exe"},
+		{"asterisk", "file*v2.bin", "file\\*v2.bin"},
+		{"backtick", "file`name.sh", "file\\`name.sh"},
+		{"bracket", "file[1].zip", "file\\[1].zip"},
+		{"combined", "test_file*v2[1].exe", "test\\_file\\*v2\\[1].exe"},
+		{"empty string", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := EscapeMarkdown(tt.input); got != tt.want {
+				t.Errorf("EscapeMarkdown(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
