@@ -133,13 +133,18 @@ func (b *Bot) processJob(job Job) {
 		return
 	}
 
-	finalReport, err := b.vt.PollAnalysis(analysisID)
-	if err != nil {
-		b.bot.Edit(statusMsg, "⚠️ Час очікування аналізу вичерпано або помилка.")
-		return
-	}
+	// Polling виконується в окремій горутині, щоб не блокувати worker.
+	// PollAnalysis має свій внутрішній rate limiting (15s між запитами).
+	go func() {
+		finalReport, err := b.vt.PollAnalysis(analysisID)
+		if err != nil {
+			log.Printf("Poll error for %s (analysis %s): %v", doc.FileName, analysisID, err)
+			b.bot.Edit(statusMsg, "⚠️ Час очікування аналізу вичерпано або помилка.")
+			return
+		}
 
-	b.sendReport(statusMsg, doc.FileName, finalReport, "🆕 Новий аналіз")
+		b.sendReport(statusMsg, doc.FileName, finalReport, "🆕 Новий аналіз")
+	}()
 }
 
 func (b *Bot) sendReport(msg *tele.Message, filename string, report *virustotal.VTResponse, note string) {
