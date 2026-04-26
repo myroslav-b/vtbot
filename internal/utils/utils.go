@@ -20,3 +20,14 @@ func CalculateSHA256(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
+
+// EscapeMarkdown екранує спеціальні символи Telegram MarkdownV1: _ * ` [
+func EscapeMarkdown(s string) string {
+	replacer := strings.NewReplacer(
+		"_", "\\_",
+		"*", "\\*",
+		"`", "\\`",
+		"[", "\\[",
+	)
+	return replacer.Replace(s)
+}

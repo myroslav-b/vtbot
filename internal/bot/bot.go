@@ -148,6 +148,7 @@ func (b *Bot) processJob(job Job) {
 }
 
 func (b *Bot) sendReport(msg *tele.Message, filename string, report *virustotal.VTResponse, note string) {
+	safeName := utils.EscapeMarkdown(filename)
 	stats := report.Data.Attributes.Stats
 
 	// Якщо stats порожній (сума 0), можливо це LastAnalysisStats (з файлу)
@@ -175,14 +176,14 @@ func (b *Bot) sendReport(msg *tele.Message, filename string, report *virustotal.
 				"🔴 Malicious: %d\n"+
 				"🟠 Suspicious: %d\n"+
 				"🟢 Harmless/Undetected: %d\n",
-			emoji, verdict, filename, note,
+			emoji, verdict, safeName, note,
 			stats.Malicious, stats.Suspicious, stats.Harmless+stats.Undetected,
 		)
 	} else {
 		text = fmt.Sprintf(
 			"📂 Файл: `%s`\n"+
 				"%s Результат: %s\n",
-			filename, emoji, verdict,
+			safeName, emoji, verdict,
 		)
 	}
 
